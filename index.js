@@ -7,6 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 const ffmpegPath = require('ffmpeg-static');
 const ffmpeg = require('fluent-ffmpeg');
 
+ffmpeg.setFfmpegPath(ffmpegPath);
+
 const app = express();
 app.use(express.json());
 
@@ -47,24 +49,12 @@ async function decryptMedia(filePath, mediaKeyB64, mediaType = 'Audio') {
   return decrypted.slice(0, -padding);
 }
 
-function convertToMp3(inputBuffer) {
+function convertToMp3(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
-    const inputPath = `/tmp/${uuidv4()}.ogg`;
-    const outputPath = `/tmp/${uuidv4()}.mp3`;
-
-    fs.writeFileSync(inputPath, inputBuffer);
-
     ffmpeg(inputPath)
-      .setFfmpegPath(ffmpegPath)
-      .audioCodec('libmp3lame')
-      .format('mp3')
-      .on('end', () => {
-        const mp3Buffer = fs.readFileSync(outputPath);
-        fs.unlinkSync(inputPath);
-        fs.unlinkSync(outputPath);
-        resolve(mp3Buffer);
-      })
+      .toFormat('mp3')
       .on('error', reject)
+      .on('end', resolve)
       .save(outputPath);
   });
 }
@@ -76,7 +66,9 @@ app.post('/decrypt', async (req, res) => {
     return res.status(400).json({ error: 'Parâmetros "url" e "mediaKey" são obrigatórios.' });
   }
 
-  const tempFile = path.join('/tmp', `${uuidv4()}.enc`);
+  const tempEncPath = path.join('/tmp', `${uuidv4()}.enc`);
+  const tempOggPath = path.join('/tmp', `${uuidv4()}.ogg`);
+  const tempMp3Path = path.join('/tmp', `${uuidv4()}.mp3`);
 
   try {
     const response = await axios.get(url, {
@@ -89,23 +81,22 @@ app.post('/decrypt', async (req, res) => {
       }
     });
 
-    console.log('🔍 Status do download:', response.status);
-    if (!fs.existsSync('/tmp')) fs.mkdirSync('/tmp', { recursive: true });
-    fs.writeFileSync(tempFile, response.data);
+    fs.writeFileSync(tempEncPath, response.data);
 
-    const decryptedBuffer = await decryptMedia(tempFile, mediaKey, mediaType);
-    const mp3Buffer = await convertToMp3(decryptedBuffer);
-    const base64 = mp3Buffer.toString('base64');
+    const decryptedBuffer = await decryptMedia(tempEncPath, mediaKey, mediaType);
+    fs.writeFileSync(tempOggPath, decryptedBuffer);
 
-    res.json({ base64 });
+    await convertToMp3(tempOggPath, tempMp3Path);
+
+    const finalBase64 = fs.readFileSync(tempMp3Path).toString('base64');
+
+    res.json({ base64: finalBase64 });
   } catch (err) {
-    console.error('❌ Erro:', err.message);
+    console.error('❌ Erro:', err);
     res.status(500).json({ error: err.message });
   } finally {
-    fs.existsSync(tempFile) && fs.unlinkSync(tempFile);
+    [tempEncPath, tempOggPath, tempMp3Path].forEach(file => {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    });
   }
-});
-
-app.listen(7245, '0.0.0.0', () => {
-  console.log('🟢 API Online na porta 7245');
 });
