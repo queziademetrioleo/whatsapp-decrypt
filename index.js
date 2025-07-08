@@ -55,19 +55,23 @@ app.post('/decrypt', async (req, res) => {
   const tempFile = path.join('/tmp', `${uuidv4()}.enc`);
 
   try {
-   const response = await axios.get(url, {
-  responseType: 'arraybuffer',
-  timeout: 60000,
-  headers: {
-    'User-Agent': 'WhatsApp/2.23.11.77 A',
-    'Referer': 'https://web.whatsapp.com/',
-    'Origin': 'https://web.whatsapp.com'
-  }
-});
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      headers: {
+        'User-Agent': 'WhatsApp/2.23.11.77 A',
+        'Referer': 'https://web.whatsapp.com/',
+        'Origin': 'https://web.whatsapp.com'
+      }
+    });
 
-console.log('🔍 Status do download:', response.status); // ADICIONADO
+    console.log('🔍 Status do download:', response.status);
 
-
+    // ✅ Salva o conteúdo no disco antes de descriptografar
+    if (!fs.existsSync('/tmp')) {
+      fs.mkdirSync('/tmp', { recursive: true });
+    }
+    fs.writeFileSync(tempFile, response.data); // ← ESSA LINHA FALTAVA!
 
     const decryptedBuffer = await decryptMedia(tempFile, mediaKey, mediaType);
     const base64 = decryptedBuffer.toString('base64');
