@@ -55,7 +55,7 @@ app.post('/decrypt', async (req, res) => {
   const tempFile = path.join('/tmp', `${uuidv4()}.enc`);
 
   try {
-    const response = await axios.get(url, {
+   const response = await axios.get(url, {
   responseType: 'arraybuffer',
   timeout: 60000,
   headers: {
@@ -64,6 +64,9 @@ app.post('/decrypt', async (req, res) => {
     'Origin': 'https://web.whatsapp.com'
   }
 });
+
+console.log('🔍 Status do download:', response.status); // ADICIONADO
+
 
 
     const decryptedBuffer = await decryptMedia(tempFile, mediaKey, mediaType);
